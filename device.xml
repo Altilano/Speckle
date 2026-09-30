@@ -1,0 +1,41 @@
+<device_state libver="3.5" filemajor="1" fileminor="0">
+    <device name="DMK 21AF618" base_name="DMK 21AF618" unique_name="DMK 21AF618 13022B92FF">
+        <videoformat>Y800 (640x480)</videoformat>
+        <fps>30.000030</fps>
+        <vcdpropertyitems>
+            <item guid="{284C0E06-010B-45BF-8291-09D90A459B28}" name="Brightness">
+                <element guid="{B57D3000-0AC6-4819-A609-272A33140ACA}" name="Value">
+                    <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E03}" value="136" />
+                </element>
+            </item>
+            <item guid="{284C0E0B-010B-45BF-8291-09D90A459B28}" name="Gamma">
+                <element guid="{B57D3000-0AC6-4819-A609-272A33140ACA}" name="Value">
+                    <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E03}" value="10" />
+                </element>
+            </item>
+            <item guid="{284C0E0F-010B-45BF-8291-09D90A459B28}" name="Gain">
+                <element guid="{B57D3001-0AC6-4819-A609-272A33140ACA}" name="Auto">
+                    <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E04}" value="0" />
+                </element>
+                <element guid="{B57D3000-0AC6-4819-A609-272A33140ACA}" name="Value">
+                    <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E03}" value="250" />
+                </element>
+            </item>
+            <item guid="{90D5702E-E43B-4366-AAEB-7A7A10B448B4}" name="Exposure">
+                <element guid="{B57D3001-0AC6-4819-A609-272A33140ACA}" name="Auto">
+                    <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E04}" value="0" />
+                </element>
+                <element guid="{B57D3000-0AC6-4819-A609-272A33140ACA}" name="Value">
+                    <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E08}" value="0.033333" />
+                </element>
+                <element guid="{6519038C-1AD8-4E91-9021-66D64090CC85}" name="Auto Reference">
+                    <itf guid="{99B44940-BFE1-4083-ADA1-BE703F4B8E03}" value="800" />
+                </element>
+            </item>
+            <item guid="{90D57030-E43B-4366-AAEB-7A7A10B448B4}" name="Focus" />
+            <item guid="{90D57031-E43B-4366-AAEB-7A7A10B448B4}" name="Trigger" />
+            <item guid="{E33B9C58-0BF8-442D-8035-B4ABD7AF44AA}" name="Flip Horizontal" />
+            <item guid="{E33B9C58-0BF8-442D-8035-B4ABD7AF44AB}" name="Flip Vertical" />
+        </vcdpropertyitems>
+    </device>
+</device_state>
