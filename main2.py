@@ -84,9 +84,9 @@ hgh = np.linspace(0,10, 11, dtype='int')
 
         np.savez(f'Amostras_10_2025\\amostra36_lg{n}{m}_step100e-9_Resolution{resolution}_modesize{size:.2f}', data)
     
-print("lg end")"""
+print("lg end")
 
-"""for size in np.linspace(0.3, 0.6, 7):
+for size in np.linspace(0.3, 0.6, 7):
     for mode in range(len(hg_modes)):
         stage_z.move_to(0.003) # in meter
         stage_z.wait_move()
