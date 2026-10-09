@@ -1,36 +1,52 @@
 """
-camera.py - Helper functions for The Imaging Source DMK 21AF618 using the
-official `imagingcontrol4` (IC4) Python package.
+camera.py - Helper functions for The Imaging Source DMK 27AUR0135 (monochrome,
+USB 3 camera of the "27U" series) using the official `imagingcontrol4` (IC4) package.
 
 Requirements
 ------------
     pip install imagingcontrol4 numpy
 
-IC4 talks to cameras through GenTL drivers. The DMK 21AF618 is a FireWire
-(IEEE 1394) camera, so you also need The Imaging Source "IC4 GenTL Driver for
-Legacy Devices" (plus the FireWire device driver) installed. The old DirectShow
-driver alone (what IC Capture uses) is NOT enough for IC4.
+IMPORTANT - drivers (Windows): `pip install imagingcontrol4` installs only the Python
+bindings. IC4 reaches cameras through GenTL producers, installed separately from
+https://www.theimagingsource.com/en-us/support/download/ . The 27U series is a
+"Non-GenICam" (legacy) camera, NOT USB3 Vision, so you need:
+  1. the download called "GenTL Producer for Non-GenICam Cameras (DirectShow)"
+     (installs the "IC4 GenTL Driver for Legacy Devices"), and
+  2. the matching DirectShow device driver ("Device Driver for USB Cameras", the one
+     IC Capture uses).
+The "IC4 GenTL Driver for USB3Vision Devices" (32U/33U/37U/38U) will load but will not
+list this camera. After installing, fully restart VS Code/the terminal so the updated
+GENICAM_GENTL64_PATH is picked up, then run this file: if no camera is found it calls
+diagnose(), which shows what IC4 sees.
 
 Typical use
 -----------
     import camera
 
     cam = camera.init_camera(exposure_s=0.01, bitdepth=8)
-    img = camera.take_picture(cam)          # 2D numpy array
+    img = camera.take_picture(cam)                      # 2D numpy array
     camera.set_exposure(cam, 0.005)
-    camera.set_bitdepth(cam, 8)
+    camera.set_bitdepth(cam, 16)
+    stats = camera.beam_std(img, pixel_size=camera.PIXEL_SIZE)
     camera.close_camera(cam)
 """
 
-
+import gc
 from dataclasses import dataclass
 
 import numpy as np
 import imagingcontrol4 as ic4
 
+# Pixel formats requested for each bit depth. Which ones the camera really offers depends
+# on the driver mode (legacy/DirectShow cameras often only provide Mono8 = "Y800");
+# set_bitdepth() raises an error listing the available formats if one is missing.
 _BITDEPTH_TO_PIXELFORMAT = {8: "Mono8", 16: "Mono16"}
 
-_library_users = 0  # reference count so Library.init/exit are called once
+# Pixel pitch in meters (3.75 um, assuming the onsemi AR0135 sensor inferred from the
+# model name; confirm with the camera data sheet). Use as beam_std(..., pixel_size=PIXEL_SIZE).
+PIXEL_SIZE = 3.75e-6
+
+_library_ready = False  # IC4 is initialized once and kept alive (see shutdown_library)
 
 
 @dataclass
@@ -45,17 +61,17 @@ class Camera:
 # Internal helpers
 # --------------------------------------------------------------------------- #
 def _library_acquire():
-    global _library_users
-    if _library_users == 0:
+    """Initialize IC4 on first use. It is deliberately NOT shut down after every call:
+    IC4 objects (Grabber, Sink, ...) must not outlive Library.exit(), otherwise their
+    destructors print 'Library.init was not called' when Python exits."""
+    global _library_ready
+    if not _library_ready:
         ic4.Library.init()
-    _library_users += 1
+        _library_ready = True
 
 
 def _library_release():
-    global _library_users
-    _library_users = max(0, _library_users - 1)
-    if _library_users == 0:
-        ic4.Library.exit()
+    """Kept as a hook; the library stays initialized (see shutdown_library)."""
 
 
 def _start_stream(cam):
@@ -81,6 +97,55 @@ def list_cameras():
         _library_release()
 
 
+def diagnose():
+    """Print what IC4 can see, to find out why the camera is not listed.
+
+    Shows the Python bitness, the GenTL search paths (and the .cti driver files found
+    in them), IC4's own log messages and every interface/device it detects.
+    """
+    import glob
+    import os
+    import platform
+    import struct
+
+    print(f"Python {platform.python_version()} ({struct.calcsize('P') * 8}-bit)")
+    print("imagingcontrol4:", getattr(ic4, "__version__", "unknown version"))
+
+    for var in ("GENICAM_GENTL64_PATH", "GENICAM_GENTL32_PATH"):
+        val = os.environ.get(var)
+        print(f"{var} = {val!r}")
+        for folder in (val or "").split(os.pathsep):
+            if folder:
+                files = [os.path.basename(f) for f in glob.glob(os.path.join(folder, "*.cti"))]
+                print(f"    {folder}: {files or 'NO .cti files'}")
+
+    paths = os.environ.get("GENICAM_GENTL64_PATH", "")
+    if not any(k in paths.lower() for k in ("legacy", "directshow", "non-genicam")):
+        print("HINT: no legacy/non-GenICam producer in GENICAM_GENTL64_PATH. The 27U series "
+              "needs 'GenTL Producer for Non-GenICam Cameras (DirectShow)' (the USB3Vision "
+              "producer does not list this camera). Install it and restart VS Code/the terminal.")
+
+    global _library_ready
+    if not _library_ready:
+        try:  # with IC4 log output, which says which producers were loaded or rejected
+            ic4.Library.init(api_log_level=ic4.LogLevel.INFO, log_targets=ic4.LogTarget.STDERR)
+        except (TypeError, AttributeError):
+            ic4.Library.init()
+        _library_ready = True
+    try:
+        interfaces = list(ic4.DeviceEnum.interfaces())
+        print(f"Interfaces found by IC4: {len(interfaces)}")
+        for itf in interfaces:
+            print("  -", getattr(itf, "display_name", itf),
+                  "| producer:", getattr(itf, "transport_layer_name", "?"))
+            for d in getattr(itf, "devices", []):
+                print("       device:", d.model_name, d.serial)
+        print("Devices found by IC4:", [(d.model_name, d.serial) for d in ic4.DeviceEnum.devices()])
+    finally:
+        interfaces = itf = d = None  # release IC4 objects before the library shuts down
+        _library_release()
+
+
 def init_camera(index=0, serial=None, bitdepth=8, exposure_s=None):
     """Open the camera, configure it and start streaming.
 
@@ -88,7 +153,7 @@ def init_camera(index=0, serial=None, bitdepth=8, exposure_s=None):
     ----------
     index : int        Position in the device list (used if `serial` is None).
     serial : str       Select a camera by serial number instead of index.
-    bitdepth : int     8 (Mono8) or 16 (Mono16, if supported by the camera).
+    bitdepth : int     8 (Mono8) or 16 (Mono16).
     exposure_s : float Exposure time in seconds. None = leave as is.
 
     Returns
@@ -100,8 +165,11 @@ def init_camera(index=0, serial=None, bitdepth=8, exposure_s=None):
         devices = ic4.DeviceEnum.devices()
         if not devices:
             raise RuntimeError(
-                "No camera found. Check the cable/power and that the IC4 GenTL "
-                "driver for legacy (FireWire) devices is installed."
+                "No camera found by IC4. Check the USB 3 cable/port and that the camera is "
+                "not open in another program (e.g. IC Capture). The DMK 27AUR0135 is a "
+                "legacy (non-GenICam) camera: install 'GenTL Producer for Non-GenICam "
+                "Cameras (DirectShow)' plus the matching DirectShow driver, restart VS "
+                "Code, and run diagnose() to see what IC4 detects."
             )
 
         if serial is not None:
@@ -196,7 +264,7 @@ def set_bitdepth(cam, bitdepth):
 
 
 def close_camera(cam):
-    """Stop streaming, close the device and release the IC4 library."""
+    """Stop streaming and close the device (IC4 itself stays initialized for reuse)."""
     if cam is None:
         return
     try:
@@ -204,13 +272,31 @@ def close_camera(cam):
         if cam.grabber.is_device_open:
             cam.grabber.device_close()
     finally:
+        cam.sink = None
+        cam.grabber = None
         _library_release()
+
+
+def shutdown_library():
+    """Optional: shut IC4 down completely (normally not needed, the OS cleans up on exit).
+
+    Call it only after every camera was closed with close_camera() AND every handle
+    was deleted (`del cam`), otherwise IC4 prints destructor errors."""
+    global _library_ready
+    if _library_ready:
+        gc.collect()
+        ic4.Library.exit()
+        _library_ready = False
 
 
 
 
 if __name__ == "__main__":
-    print("Cameras found:", list_cameras())
+    cameras = list_cameras()
+    print("Cameras found:", cameras)
+    if not cameras:
+        diagnose()
+        raise SystemExit(1)
     cam = init_camera(exposure_s=0.01, bitdepth=8)
     img = take_picture(cam)
     print("Image:", img.shape, img.dtype, "min/max:", img.min(), img.max())
