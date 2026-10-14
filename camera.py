@@ -297,7 +297,7 @@ if __name__ == "__main__":
     if not cameras:
         diagnose()
         raise SystemExit(1)
-    cam = init_camera(exposure_s=0.01, bitdepth=8)
+    cam = init_camera(exposure_s=1/10, bitdepth=8)
     img = take_picture(cam)
     print("Image:", img.shape, img.dtype, "min/max:", img.min(), img.max())
     close_camera(cam)
